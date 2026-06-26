@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Mi Experiencia AR – Marcador Hiro</title>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       1. LIBRERÍAS  (A-Frame + AR.js, todo gratuito y de código abierto)
+       ═══════════════════════════════════════════════════════════ -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       2. ESTILOS DE LA INTERFAZ SUPERPUESTA (HUD)
+       ═══════════════════════════════════════════════════════════ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #000;
+      overflow: hidden;          /* La cámara ocupa toda la pantalla */
+    }
+
+    /* Panel de instrucciones visible al inicio */
+    #hud {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 9999;
+      padding: 14px 20px 20px;
+      background: linear-gradient(to top, rgba(0,0,0,0.82) 60%, transparent);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    #hud .badge {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6ee7f7;
+      font-weight: 700;
+    }
+
+    #hud .instruction {
+      font-size: 15px;
+      text-align: center;
+      line-height: 1.5;
+      color: rgba(255,255,255,0.88);
+    }
+
+    #hud .marker-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 13px;
+      color: #a3e7fd;
+    }
+
+    /* Pequeño ícono SVG del marcador Hiro */
+    .hiro-icon {
+      width: 36px; height: 36px;
+      border: 2px solid #6ee7f7;
+      border-radius: 4px;
+      padding: 2px;
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    /* Indicador de estado: detectando / encontrado */
+    #status-dot {
+      position: fixed;
+      top: 18px; right: 18px;
+      z-index: 9999;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: #f87171;          /* rojo = buscando */
+      box-shadow: 0 0 0 0 rgba(248,113,113,0.6);
+      animation: pulse-red 1.8s infinite;
+      transition: background 0.4s;
+    }
+    #status-dot.found {
+      background: #4ade80;           /* verde = marcador encontrado */
+      box-shadow: 0 0 0 0 rgba(74,222,128,0.6);
+      animation: pulse-green 1.8s infinite;
+    }
+
+    @keyframes pulse-red {
+      0%   { box-shadow: 0 0 0 0   rgba(248,113,113,0.6); }
+      70%  { box-shadow: 0 0 0 8px rgba(248,113,113,0);   }
+      100% { box-shadow: 0 0 0 0   rgba(248,113,113,0);   }
+    }
+    @keyframes pulse-green {
+      0%   { box-shadow: 0 0 0 0   rgba(74,222,128,0.6); }
+      70%  { box-shadow: 0 0 0 8px rgba(74,222,128,0);   }
+      100% { box-shadow: 0 0 0 0   rgba(74,222,128,0);   }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       3. INDICADOR DE ESTADO (punto en esquina superior derecha)
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="status-dot" title="Buscando marcador…"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       4. PANEL HUD CON INSTRUCCIONES
+       ═══════════════════════════════════════════════════════════ -->
+  <div id="hud">
+    <span class="badge">✦ Realidad Aumentada ✦</span>
+    <p class="instruction">Apunta tu cámara al marcador <strong>Hiro</strong><br>para ver el modelo 3D aparecer.</p>
+    <div class="marker-hint">
+      <!-- Mini representación visual del marcador Hiro -->
+      <svg class="hiro-icon" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+        <rect width="60" height="60" fill="#fff"/>
+        <rect x="6"  y="6"  width="48" height="48" fill="#000"/>
+        <rect x="12" y="12" width="36" height="36" fill="#fff"/>
+        <rect x="18" y="18" width="24" height="24" fill="#000"/>
+        <rect x="24" y="24" width="12" height="12" fill="#fff"/>
+      </svg>
+      <span>Imprime o muestra en pantalla el marcador Hiro</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       5. ESCENA A-FRAME CON AR.JS
+       ═══════════════════════════════════════════════════════════ -->
+  <!--
+    embedded          → no muestra la barra de controles de A-Frame
+    arjs              → activa AR.js con la cámara trasera
+    vr-mode-ui        → desactiva el botón VR (no lo necesitamos)
+    renderer          → logarithmicDepthBuffer evita que el modelo "parpadeé"
+  -->
+  <a-scene
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true; precision: medium;"
+    loading-screen="enabled: false"
+  >
+
+    <!-- ── 5a. ASSETS: precargamos el modelo para mejor rendimiento ──────── -->
+    <a-assets timeout="30000">
+      <!--
+        Usamos el modelo glTF de ejemplo "Duck" (pato) de Khronos Group,
+        publicado en el repositorio oficial de muestras de glTF.
+        URL directa a raw.githubusercontent para que no requiera login.
+      -->
+      <a-asset-item
+        id="pato-model"
+        src="https://raw.githack.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf">
+      </a-asset-item>
+    </a-assets>
+
+    <!-- ── 5b. MARCADOR HIRO ──────────────────────────────────────────────
+         type="pattern"  → marcador de imagen (Hiro)
+         preset="hiro"   → patrón integrado en AR.js, no necesita archivo externo
+    ─────────────────────────────────────────────────────────────────────── -->
+    <a-marker
+      type="pattern"
+      preset="hiro"
+      id="hiro-marker"
+    >
+
+      <!-- ── 5c. MODELO 3D: el pato aparece encima del marcador ─────────────
+           src          → referencia al asset precargado
+           position     → X Y Z respecto al centro del marcador
+                          (Y=0.05 lo levanta ligeramente del suelo)
+           rotation     → lo giramos -90° en X para que quede "parado"
+                          (los glTF de Khronos a veces vienen acostados)
+           scale        → 0.07 en los 3 ejes → tamaño cómodo sobre el marcador
+           animation    → rotación continua sobre el eje Y (gira despacio)
+      ──────────────────────────────────────────────────────────────────── -->
+      <a-entity
+        id="el-pato"
+        gltf-model="#pato-model"
+        position="0 0.05 0"
+        rotation="-90 0 0"
+        scale="0.07 0.07 0.07"
+        animation="
+          property: rotation;
+          to: -90 360 0;
+          loop: true;
+          dur: 5000;
+          easing: linear
+        "
+      ></a-entity>
+
+      <!-- Sombra sutil debajo del pato: círculo negro semitransparente -->
+      <a-circle
+        radius="0.6"
+        rotation="-90 0 0"
+        position="0 0.002 0"
+        color="#000000"
+        opacity="0.18"
+        material="shader: flat"
+      ></a-circle>
+
+    </a-marker>
+
+    <!-- ── 5d. CÁMARA AR ─────────────────────────────────────────────────── -->
+    <a-entity camera></a-entity>
+
+  </a-scene>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       6. LÓGICA JAVASCRIPT: detectar marcador y actualizar HUD
+       ═══════════════════════════════════════════════════════════ -->
+  <script>
+    const marker    = document.getElementById('hiro-marker');
+    const statusDot = document.getElementById('status-dot');
+    const hud       = document.getElementById('hud');
+
+    // Cuando AR.js detecta el marcador Hiro
+    marker.addEventListener('markerFound', () => {
+      statusDot.classList.add('found');
+      statusDot.title = '¡Marcador encontrado!';
+      hud.style.opacity = '0';            // ocultamos el HUD para no tapar la AR
+    });
+
+    // Cuando el marcador sale del campo de visión
+    marker.addEventListener('markerLost', () => {
+      statusDot.classList.remove('found');
+      statusDot.title = 'Buscando marcador…';
+      hud.style.opacity = '1';            // volvemos a mostrar las instrucciones
+    });
+
+    // Transición suave del HUD
+    hud.style.transition = 'opacity 0.5s ease';
+  </script>
+
+</body>
+</html>
