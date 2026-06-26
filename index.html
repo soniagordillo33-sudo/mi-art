@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Marcador Hiro</title>
+
+  <!-- ① A-Frame: motor de escenas 3D en el navegador -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <!-- ② AR.js: extensión que añade Realidad Aumentada con marcadores a A-Frame -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    /* Que la cámara ocupe toda la pantalla sin barras de desplazamiento */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+
+    /* Capa de instrucciones semi-transparente al arrancar */
+    #overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.78);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      color: #fff;
+      text-align: center;
+      padding: 32px;
+      gap: 20px;
+    }
+    #overlay .icon { font-size: 64px; }
+    #overlay h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 1px; }
+    #overlay p  { font-size: 0.95rem; color: #ccc; max-width: 320px; line-height: 1.6; }
+    #overlay button {
+      margin-top: 8px;
+      padding: 14px 36px;
+      background: #00c9ff;
+      color: #000;
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+    }
+    #overlay button:hover { background: #00e5ff; }
+
+    /* Etiqueta flotante con el nombre del modelo */
+    #label {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-size: 0.8rem;
+      padding: 6px 16px;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ③ Pantalla de bienvenida / instrucciones -->
+  <div id="overlay">
+    <div class="icon">🔭</div>
+    <h1>Realidad Aumentada</h1>
+    <p>
+      Apunta tu cámara al <strong>marcador Hiro</strong> 
+      y verás un modelo 3D animado aparecer encima de él.<br><br>
+      Necesitas imprimir o mostrar en pantalla el marcador Hiro 
+      (búscalo como <em>"AR.js Hiro marker"</em>).
+    </p>
+    <button onclick="startAR()">¡Iniciar Cámara!</button>
+  </div>
+
+  <div id="label">🚀 Cohete • Marcador Hiro detectado</div>
+
+  <!-- ④ Escena A-Frame con AR.js activado -->
+  <!--
+    embedded       → la escena vive dentro del HTML, no en pantalla completa de A-Frame
+    arjs           → activa AR.js con suavizado de marcador (smoothCount/smoothTolerance)
+    vr-mode-ui     → oculta el botón de entrar a VR que no necesitamos
+    renderer       → logarithmicDepthBuffer evita artefactos de profundidad en AR
+  -->
+  <a-scene id="arScene"
+    style="display:none;"
+    embedded
+    arjs="sourceType: webcam;
+          debugUIEnabled: false;
+          detectionMode: mono_and_matrix;
+          matrixCodeType: 3x3;
+          smoothCount: 10;
+          smoothTolerance: 0.01;
+          smoothThreshold: 5;"
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true; antialias: true;"
+    loading-screen="dotsColor: #00c9ff; backgroundColor: #000">
+
+    <!-- ⑤ Zona de pre-carga de recursos -->
+    <a-assets timeout="15000">
+      <!--
+        Modelo GLB público: cohete de Poly Pizza (CC0 / dominio público).
+        Si prefieres otro modelo, cambia solo esta URL.
+        Fuente: https://poly.pizza  ·  author: Quaternius
+      -->
+      <a-asset-item
+        id="rocket-model"
+        src="https://cdn.glitch.global/a05cb6db-5de5-4cae-9cdd-db9a95289c49/rocket.glb?v=1689284895543">
+      </a-asset-item>
+    </a-assets>
+
+    <!-- ⑥ Marcador Hiro: todo lo que esté dentro aparece encima del marcador físico -->
+    <a-marker preset="hiro"
+      id="marker"
+      raycaster="objects: .clickable"
+      emitevents="true"
+      cursor="fuse: false; rayOrigin: mouse">
+
+      <!--
+        ⑦ Modelo 3D dentro del marcador
+           position   → levantado 1.5 unidades para "flotar" sobre el marcador
+           scale      → ajustado para que se vea bien (ni gigante ni minúsculo)
+           animation  → rotación continua sobre el eje Y, 8 segundos por vuelta
+      -->
+      <a-entity
+        id="rocket"
+        gltf-model="#rocket-model"
+        position="0 1.5 0"
+        scale="0.8 0.8 0.8"
+        animation="property: rotation;
+                   to: 0 360 0;
+                   loop: true;
+                   dur: 8000;
+                   easing: linear">
+      </a-entity>
+
+      <!-- Sombra proyectada debajo del modelo -->
+      <a-circle
+        position="0 0.01 0"
+        rotation="-90 0 0"
+        radius="0.7"
+        color="#000"
+        opacity="0.25">
+      </a-circle>
+
+    </a-marker>
+
+    <!-- ⑧ Cámara de AR.js (no mover ni modificar) -->
+    <a-entity camera></a-entity>
+
+  </a-scene>
+
+  <script>
+    /* ⑨ Lógica de inicio y eventos */
+
+    function startAR() {
+      // Ocultamos el overlay y mostramos la escena
+      document.getElementById('overlay').style.display  = 'none';
+      document.getElementById('arScene').style.display  = 'block';
+      document.getElementById('label').style.display    = 'block';
+    }
+
+    // Cuando el marcador Hiro es detectado → pequeña animación de "rebote"
+    document.addEventListener('DOMContentLoaded', () => {
+      const marker = document.getElementById('marker');
+      const rocket = document.getElementById('rocket');
+
+      marker.addEventListener('markerFound', () => {
+        console.log('✅ Marcador Hiro encontrado');
+        // Animación de rebote al aparecer
+        rocket.setAttribute('animation__bounce', {
+          property: 'position',
+          from:  '0 2.2 0',
+          to:    '0 1.5 0',
+          dur:   600,
+          easing:'easeOutBounce'
+        });
+      });
+
+      marker.addEventListener('markerLost', () => {
+        console.log('❌ Marcador Hiro perdido de vista');
+        // Eliminar animación de rebote para que no se repita de forma rara
+        rocket.removeAttribute('animation__bounce');
+      });
+    });
+  </script>
+</body>
+</html>
